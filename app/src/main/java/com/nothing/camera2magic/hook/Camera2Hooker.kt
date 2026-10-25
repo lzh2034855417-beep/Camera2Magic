@@ -36,6 +36,7 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         // 其他作用域内的应用保持旧的只替换预览面（format 1/4）行为，避免误伤。
         private const val FULL_REPLACE_PACKAGE = "com.xinchuzu.driver"
         private const val CAMERA_DEVICE_IMPL = "android.hardware.camera2.impl.CameraDeviceImpl"
+        private const val CAPTURE_SESSION_IMPL = "android.hardware.camera2.impl.CameraCaptureSessionImpl"
         private const val CAMERA_MANAGER = "android.hardware.camera2.CameraManager"
         private const val CAPTURE_REQUEST_BUILDER = $$"android.hardware.camera2.CaptureRequest$Builder"
         private var activatedCamera = WeakReference<Any>(null)
@@ -63,6 +64,10 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
     init {
         val classLoader = param.classLoader
 
+        classLoader.safeHook(CAPTURE_SESSION_IMPL) {
+            captureCallbackProxyHook()
+        }
+
         classLoader.safeHook(CAMERA_MANAGER) {
             openCameraHook()
         }
@@ -77,6 +82,50 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             addTargetHook()
             removeTargetHook()
         }
+    }
+
+    private fun Class<*>.captureCallbackProxyHook() {
+        val factories = declaredMethods.filter { it.name == "createCaptureCallbackProxy" }
+        if (factories.isEmpty()) {
+            Dog.w(TAG, "Capture callback proxy factory unavailable", SM.enableLog)
+        }
+        factories.forEach { factory ->
+            magic.hook(factory).intercept { chain ->
+                val callback = chain.proceed()
+                runCatching {
+                    callback?.javaClass?.safeHook { captureBufferLostHook() }
+                }.onFailure {
+                    Dog.e(TAG, "Capture callback adapter failed: ${it.message}", it, SM.enableLog)
+                }
+                callback
+            }
+        }
+    }
+
+    private fun Class<*>.captureBufferLostHook() {
+        val callbacks = declaredMethods.filter { method ->
+            method.name == "onCaptureBufferLost" &&
+                method.parameterTypes.count { it == Surface::class.java } == 1
+        }
+        callbacks.forEach { method ->
+            val surfaceIndex = method.parameterTypes.indexOf(Surface::class.java)
+            magic.hook(method).intercept { chain ->
+                // 回调归一化不能判 readyForHook：关闭/换镜头后仍有延迟回调。
+                val arguments = runCatching {
+                    val surface = chain.args[surfaceIndex] as? Surface
+                        ?: return@runCatching null
+                    val original = BlackHole.originalCallbackSurface(surface)
+                    if (original === surface) return@runCatching null
+                    Dog.i(TAG, "Restore original Surface for buffer-lost callback", SM.enableLog)
+                    chain.args.toTypedArray().also { it[surfaceIndex] = original }
+                }.onFailure {
+                    Dog.e(TAG, "Buffer-lost mapping failed: ${it.message}", it, SM.enableLog)
+                }.getOrNull()
+                // 保留原始失败回调和异常语义，绝不吞掉应用自身的异常。
+                if (arguments == null) chain.proceed() else chain.proceed(arguments)
+            }
+        }
+        Dog.i(TAG, "Capture callback adapter installed: ${callbacks.size} method(s)", SM.enableLog)
     }
 
     private fun CameraDevice.updateBaseData() {

@@ -1,5 +1,7 @@
 # Camera2 Magic
 
+> **独立实验修复分支**：基于原项目 2.3.0，尝试修复 CameraX 的 buffer-lost 回调对象失配。尚未通过手机验收，不代表原作者发布。变更原理、验证状态和构建说明见 [CALLBACK_FIX.md](CALLBACK_FIX.md)。
+
 > Android 虚拟摄像头 Xposed 模块，基于 [Atomos-X/Camera2Magic](https://github.com/Atomos-X/Camera2Magic) 二次开发。
 
 [![Build Release APK](https://github.com/servant1228/Camera2Magic/actions/workflows/build-release.yml/badge.svg)](https://github.com/servant1228/Camera2Magic/actions/workflows/build-release.yml)

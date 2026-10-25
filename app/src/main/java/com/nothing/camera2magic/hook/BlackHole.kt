@@ -20,6 +20,11 @@ object BlackHole {
     // 任意相机/binder 线程可触达，必须包 synchronizedMap；遍历点（clear/originSurfaces）
     // 额外 synchronized(_oab)，Collections.synchronizedMap 只保证单次调用原子
     private val _oab: MutableMap<Surface, BH> = Collections.synchronizedMap(WeakHashMap<Surface, BH>())
+    private val callbackAliases = SurfaceAliasRegistry<Surface>()
+
+    // 不在 clear() 清空：已释放的输出仍可能收到框架队列中的延迟回调。
+    // 两端均为弱引用，不延长 Surface 或相机会话的生命周期。
+    fun originalCallbackSurface(surface: Surface): Surface = callbackAliases.resolve(surface)
 
     val oab: MutableMap<Surface, BH>
         get() = _oab
@@ -69,7 +74,11 @@ object BlackHole {
 
     private fun getOrCreateBlackHole(origin: Surface): BH {
         // getOrPut 的 get+put 两步需要原子性，synchronizedMap 只保证单次调用
-        return synchronized(_oab) { _oab.getOrPut(origin) { createBlackHole() } }
+        return synchronized(_oab) {
+            _oab.getOrPut(origin) {
+                createBlackHole().also { callbackAliases.register(origin, it.surface) }
+            }
+        }
     }
 
     private fun getBlackHole(origin: Surface): Surface? {

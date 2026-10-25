@@ -17,6 +17,8 @@ LSPosed / libxposed（API 102）的 Android 虚拟摄像头模块。单模块 `:
 
 ## 技术栈
 
+本 fork 的 CameraX 回调修复：`BlackHole` 创建替代面时登记弱引用反向映射；`Camera2Hooker` 在框架 `createCaptureCallbackProxy` 返回的对象上适配 `onCaptureBufferLost`，只把已知替代面还原为原面。该回调归一化不判配置门控，避免关闭后延迟回调失配；`BlackHole.clear()` 仍释放资源，但不清空弱引用映射。不要屏蔽全部失败回调或吞掉应用自身异常。验证范围与构建限制见根目录 `CALLBACK_FIX.md`。
+
 Kotlin + kotlinx.serialization。**AGP 9 自带 Kotlin 编译器，不加 `org.jetbrains.kotlin.android`**；只额外加两个 Kotlin 编译器插件（`kotlin.plugin.compose`、`kotlin.plugin.serialization`），catalog 里的 `kotlin` 版本只钉这两个插件、不决定编译器版本。UI：Compose + Miuix（`-ui/-squircle/-icons/-blur/-preference` + `-nav`）+ `androidx.navigationevent` + material-icons-extended。**导航是 miuix-nav，不是 androidx navigation3**（`ui/navigation3/` 只是迁移后遗留的包名）。播放：media3-exoplayer（自定义 DataSource）。Hook：libxposed `api` compileOnly + `service` implementation。其他：hiddenapibypass。
 
 **依赖版本唯一真源 = [gradle/libs.versions.toml](gradle/libs.versions.toml)**，坐标/SDK 在 [app/build.gradle](app/build.gradle)；新增依赖一律进 catalog，不在 build.gradle 硬编码版本号（libxposed 两条是历史遗留，触及时顺手迁入 catalog）。SDK：compileSdk 37 / minSdk 34 / targetSdk 36，jvmTarget 21（miuix-nav 的 inline API 要求）。
