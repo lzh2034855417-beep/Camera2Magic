@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Camera2 Magic Callback Test</string>
+    <string name="app_name">Camera2 Magic</string>
     <string name="app_description">A Virtual Camera, support Android 14+</string>
     <string name="home_device_model">Model</string>
     <string name="home_device_system">System</string>

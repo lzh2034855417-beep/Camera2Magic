@@ -159,4 +159,4 @@ MainActivity → CompositionLocal         MagicHook.onPackageReady(param)
 - **本机 git 拿不到仓库时 versionCode 静默退化成 1**：`getGitCommitCount()` 把异常吞了 `return 1`，而 Windows 上仓库目录属主与当前账号不一致时 `git rev-list` 直接报 `detected dubious ownership` → **打出来的包 versionName 照常、versionCode = 1**，装机被当成降级拒绝，症状与「包坏了」无法区分。出正式包前先确认 `git rev-list --count HEAD` 能跑；不能跑就用**进程级**注入绕过（不碰用户全局配置）：`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=<仓库路径> ./gradlew --no-daemon assembleRelease`——**必须带 `--no-daemon`**，否则 `git` 是在早已启动的 Gradle daemon 环境里执行，看不到客户端的变量。CI（ubuntu）无此问题。
 - Gradle wrapper 的 `distributionUrl` 指向**腾讯云镜像**，不是 services.gradle.org——CI 也从那里下载发行版。
 
-本实验 fork 的安装 ID / module.prop id 为 com.nothing.camera2magic.callbackfix，源码 namespace 保留原值以兼容 JNI；版本名与 APK 文件名都带 -callback1，可与原版共存。勿将 namespace 也批量重命名。
+本 fork 的安装 ID / module.prop id 为 com.nothing.camera2magic.callbackfix，源码 namespace 保留原值以兼容 JNI；显示名为 Camera2 Magic，用户定制版本为 2.3.1，可与原版共存并覆盖升级先前的 callback1 测试版。勿将 namespace 也批量重命名。

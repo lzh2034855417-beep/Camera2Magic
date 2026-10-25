@@ -10,8 +10,7 @@ plugins {
 // 版本控制变量 version for camera3
 def majorVersion = 2
 def minorVersion = 3
-def patchVersion = 0
-def experimentalSuffix = "-callback1"
+def patchVersion = 1
 def versionCodeOffset = 0 // 保持与旧版本兼容的偏移量
 
 def getGitCommitCount = { ->
@@ -92,7 +91,7 @@ android {
 
         // versionCode = 偏移量 + Git提交次数，确保比旧版本大
         versionCode versionCodeOffset + gitCommitCount
-        versionName "${majorVersion}.${minorVersion}.${patchVersion}${experimentalSuffix}"
+        versionName "${majorVersion}.${minorVersion}.${patchVersion}"
 
         if (hasNativeSource) {
             externalNativeBuild {
@@ -142,7 +141,7 @@ android {
                 def abi = output.filters.find {
                     it.filterType == FilterConfiguration.FilterType.ABI
                 }?.identifier
-                def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}${experimentalSuffix}-${abi}.apk"
+                def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-${abi}.apk"
                 output.outputFileName.set(fileName)
             }
         })
