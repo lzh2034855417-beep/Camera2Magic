@@ -1,4 +1,4 @@
-id=com.nothing.camera2magic
+id=com.nothing.camera2magic.callbackfix
 minApiVersion=102
 targetApiVersion=102
 staticScope=false

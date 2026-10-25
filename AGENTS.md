@@ -17,7 +17,7 @@ LSPosed / libxposed（API 102）的 Android 虚拟摄像头模块。单模块 `:
 
 ## 技术栈
 
-本 fork 的 CameraX 回调修复：`BlackHole` 创建替代面时登记弱引用反向映射；`Camera2Hooker` 在框架 `createCaptureCallbackProxy` 返回的对象上适配 `onCaptureBufferLost`，只把已知替代面还原为原面。该回调归一化不判配置门控，避免关闭后延迟回调失配；`BlackHole.clear()` 仍释放资源，但不清空弱引用映射。不要屏蔽全部失败回调或吞掉应用自身异常。验证范围与构建限制见根目录 `CALLBACK_FIX.md`。
+本 fork 的 CameraX 回调修复：`BlackHole` 创建替代面时登记弱引用反向映射；`Camera2Hooker` 在框架 `createCaptureCallbackProxy` / `createCaptureCallbackProxyWithExecutor` 返回的对象上适配 `onCaptureBufferLost`，只把已知替代面还原为原面。该回调归一化不判配置门控，避免关闭后延迟回调失配；`BlackHole.clear()` 仍释放资源，但不清空弱引用映射。不要屏蔽全部失败回调或吞掉应用自身异常。验证范围与构建限制见根目录 `CALLBACK_FIX.md`。
 
 Kotlin + kotlinx.serialization。**AGP 9 自带 Kotlin 编译器，不加 `org.jetbrains.kotlin.android`**；只额外加两个 Kotlin 编译器插件（`kotlin.plugin.compose`、`kotlin.plugin.serialization`），catalog 里的 `kotlin` 版本只钉这两个插件、不决定编译器版本。UI：Compose + Miuix（`-ui/-squircle/-icons/-blur/-preference` + `-nav`）+ `androidx.navigationevent` + material-icons-extended。**导航是 miuix-nav，不是 androidx navigation3**（`ui/navigation3/` 只是迁移后遗留的包名）。播放：media3-exoplayer（自定义 DataSource）。Hook：libxposed `api` compileOnly + `service` implementation。其他：hiddenapibypass。
 
@@ -46,7 +46,7 @@ app/src/main/jniLibs/arm64-v8a/libcamera3.so   # 预编译闭源产物（需提�
 
 `scope.list` 为空是有意的（`module.prop` 里 `staticScope=false`，作用域由模块内 UI 动态管理），不要往里加应用。`module.prop` 里**没有 name/description/version**，所以 LSPosed 展示的是 APK 的 label 与 `AndroidManifest` 的 `android:description`——改文案要改 manifest 指向的字符串，不是 module.prop。
 
-单测约束：只有 `testImplementation junit`，没有 Robolectric、没有 `testOptions.unitTests.returnDefaultValues`，**测试必须不碰 Android framework**——需要 `SharedPreferences` 时用手写假实现（接口在 android.jar 里是完整的，只有 stub 方法体会抛「not mocked」，见 `SourceManagerTest`），并且全程不开 `Dog` 日志（`Dog` 在 enabled=false 时短路，否则撞上 `android.util.Log`）。同理 `SourceManager` 是 object 单例，用例之间状态会串，靠 `init()` + `activateSlot()` 显式重置。CI 不跑单测。
+单测约束：只有 `testImplementation junit`，没有 Robolectric、没有 `testOptions.unitTests.returnDefaultValues`，**测试必须不碰 Android framework**——需要 `SharedPreferences` 时用手写假实现（接口在 android.jar 里是完整的，只有 stub 方法体会抛「not mocked」，见 `SourceManagerTest`），并且全程不开 `Dog` 日志（`Dog` 在 enabled=false 时短路，否则撞上 `android.util.Log`）。同理 `SourceManager` 是 object 单例，用例之间状态会串，靠 `init()` + `activateSlot()` 显式重置。上游发布工作流不跑单测；本 fork 的 callback-check.yml 会运行单测与 Kotlin 编译。
 
 ## 架构
 
@@ -155,6 +155,8 @@ MainActivity → CompositionLocal         MagicHook.onPackageReady(param)
 - ABI split 只产 arm64-v8a，输出名 `CAM2Magic-<version>-arm64-v8a.apk`。**文件名是用 `majorVersion/minorVersion/patchVersion` 三个字面量重新拼的、不是读 `versionName`**，改版本号要同时确认这两处；变体没有 ABI filter 时文件名会变成 `...-null.apk`。versionName 靠手工 bump，release tag 也是手工打且必须对得上（只有 `v*` tag 触发 CI）。
 - release 签名代码里的优先级是 `CAM2MAGIC_KEYSTORE_B64` > `CAM2MAGIC_KEYSTORE`（路径）> 本地 `app/keystore.properties`；都没有则产出未签名 APK 并打警告。**但 CI 实际走的是路径分支**——workflow 先把 `CAM2MAGIC_KEYSTORE_B64` secret 解码成临时文件，再以 `CAM2MAGIC_KEYSTORE` 喂给 Gradle，所以 build.gradle 里那个 B64 分支目前是死代码（留给本地/其他 CI）。minify + shrinkResources 开着，见上文 proguard 约束。
 - **配置缓存不能开**：versionCode 在配置阶段执行 `git rev-list --count HEAD`，开缓存后该值被固化、不再随提交递增。gradle.properties 里只有一条**注释**说明，**并没有 `org.gradle.configuration-cache=false`**——所以一个 IDE 设置或误加的 `--configuration-cache` 就能静默冻结 versionCode。构建缓存（`org.gradle.caching=true`）是开着的。同理 CI checkout 必须 `fetch-depth: 0`。
-- **CI 不跑 buildNative、也不跑单测**（[build-release.yml](.github/workflows/build-release.yml)，**仅 `v*` tag 与手动触发，push master 不触发**，唯一命令是 `./gradlew assembleRelease -x lintVitalRelease`）。正式发布流程 = 本机 `buildNative` 更新 jniLibs 产物 → 提交推送 master → 打 `v*` tag 推送（或手动 workflow_dispatch）→ CI 出签名包。CI **只上传 artifact、不创建 Release**。`.so` 是提交进仓库的构建产物，这点与常规直觉相反，是有意的（源码不入库）。
+- **上游发布工作流不跑 buildNative、也不跑单测**（[build-release.yml](.github/workflows/build-release.yml)，**仅 `v*` tag 与手动触发，push master 不触发**，唯一命令是 `./gradlew assembleRelease -x lintVitalRelease`）。正式发布流程 = 本机 `buildNative` 更新 jniLibs 产物 → 提交推送 master → 打 `v*` tag 推送（或手动 workflow_dispatch）→ CI 出签名包。CI **只上传 artifact、不创建 Release**。`.so` 是提交进仓库的构建产物，这点与常规直觉相反，是有意的（源码不入库）。
 - **本机 git 拿不到仓库时 versionCode 静默退化成 1**：`getGitCommitCount()` 把异常吞了 `return 1`，而 Windows 上仓库目录属主与当前账号不一致时 `git rev-list` 直接报 `detected dubious ownership` → **打出来的包 versionName 照常、versionCode = 1**，装机被当成降级拒绝，症状与「包坏了」无法区分。出正式包前先确认 `git rev-list --count HEAD` 能跑；不能跑就用**进程级**注入绕过（不碰用户全局配置）：`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=<仓库路径> ./gradlew --no-daemon assembleRelease`——**必须带 `--no-daemon`**，否则 `git` 是在早已启动的 Gradle daemon 环境里执行，看不到客户端的变量。CI（ubuntu）无此问题。
 - Gradle wrapper 的 `distributionUrl` 指向**腾讯云镜像**，不是 services.gradle.org——CI 也从那里下载发行版。
+
+本实验 fork 的安装 ID / module.prop id 为 com.nothing.camera2magic.callbackfix，源码 namespace 保留原值以兼容 JNI；版本名与 APK 文件名都带 -callback1，可与原版共存。勿将 namespace 也批量重命名。

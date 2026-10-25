@@ -85,7 +85,10 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
     }
 
     private fun Class<*>.captureCallbackProxyHook() {
-        val factories = declaredMethods.filter { it.name == "createCaptureCallbackProxy" }
+        val factories = declaredMethods.filter {
+            it.name == "createCaptureCallbackProxy" ||
+                it.name == "createCaptureCallbackProxyWithExecutor"
+        }
         if (factories.isEmpty()) {
             Dog.w(TAG, "Capture callback proxy factory unavailable", SM.enableLog)
         }
